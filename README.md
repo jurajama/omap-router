@@ -70,7 +70,7 @@ thresholds in [`config.py`](omap_router/config.py) are in printed millimetres.
 | 8.2 | `pipeline/segment.py` | nearest reference colour in Lab (several shades per class, user samples override), unknown pixels filled by 3×3 majority |
 | 8.3 | `pipeline/overprint.py` | purple mask; purple pixels replaced by the nearest non-purple label; purple cross-hatching detected as out-of-bounds (components enclosing many small cells, or dense purple texture with many enclosed gaps, opened to drop attached leg lines) |
 | 8.4 | `pipeline/controls.py` | wide Hough search → ring verification (support, empty inside/outside, thin stroke, sector coverage) → radius consensus `r0` → narrow re-search; finish = concentric ring pair; start = chamfer-matched rotated triangle; order = path through the leg-line graph that visits every point (DFS, threshold relaxed if lines are cut), OCR fallback |
-| 8.5 | `pipeline/lines.py` | black strokes skeletonised, width = area / length per segment, thick strokes become barriers; building outlines and small symbols ignored |
+| 8.5 | `pipeline/lines.py` | black strokes skeletonised; a stroke is a barrier if its black area / length ≥ `thick_line_mm`, or if its lightness profile across the line is wide enough (full width at half depth ≥ √(thick² + blur²), averaged along the line) — the second test catches thick walls on blurry low-resolution scans whose edges are classified grey/brown, while thin road edges and paths stay passable; building outlines (black next to solid grey only) and small symbols ignored |
 | 8.6 | `pipeline/terrain.py` | forbidden = grey ∪ olive ∪ water (thin blue north lines removed) ∪ barriers ∪ purple hatching ∪ outside the map ∪ forbid polygons − allow polygons; outside the map = white paper not enclosed by map content (content closed over gaps up to 5 mm, holes filled); cost grid where a cell is forbidden only if all its pixels are, or if a barrier crosses it |
 | 8.7 | `pipeline/routing.py` | `skimage.graph.MCP_Geometric` per leg between snapped endpoints, simplified with shapely and re-checked against the forbidden cells |
 
@@ -124,3 +124,6 @@ forbidden), `passages.png` (white = narrow passages that must stay open) and
   a complete and consistent 1…n numbering; otherwise you order the controls by hand.
 - Very low resolution scans (control circle radius below ~8 px) make the
   thick/thin line distinction unreliable; use forbid polygons for missed walls.
+  The blur allowance `OMAP_LINE_BLUR_PX` (default 2 px) suits soft scans; for
+  very sharp images a 0.35 mm wall may need a lower value. If thin lines become
+  barriers, raise it or `OMAP_THICK_LINE_MM`.

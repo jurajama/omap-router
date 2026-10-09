@@ -125,7 +125,11 @@ class Settings(BaseSettings):
 
     # --- black lines ---
     thick_line_mm: float = 0.35
+    line_blur_px: float = 2.0  # scan blur (FWHM) added to measured stroke widths
+    line_min_length_px: int = 4  # fewer measured skeleton pixels nearby -> width unreliable
+    line_window_px: int = 5  # half-size of the window that averages profile widths
     building_outline_px: int = 2
+    building_min_width_mm: float = 0.6  # thinner grey is line anti-aliasing, not a building
     line_min_bbox_mm: float = 2.0
     line_min_elongation_ratio: float = 3.0
 

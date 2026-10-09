@@ -90,7 +90,7 @@ def auto_forbidden(
         forb |= hatch
     if outside is not None:
         forb |= outside
-    forb |= building_outline(labels, 1)
+    forb |= building_outline(labels, 1, px_per_mm, cfg)
     forb |= water_mask(labels, px_per_mm, cfg)
     forb |= barrier
     return forb
