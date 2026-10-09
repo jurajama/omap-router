@@ -16,6 +16,8 @@ const state = {
   visible: { forbidden: true, routes: true, controls: true },
   opacity: 0.6,
   layerVersion: Date.now(),
+  legIndex: null, // null = all legs, otherwise index of the single leg shown
+  legLines: [], // [{ line, name, leg }] per leg, rebuilt by renderLegs
 };
 
 // ---------------------------------------------------------------- helpers
@@ -454,32 +456,69 @@ function renderScale() {
 // ---------------------------------------------------------------- legs
 
 function renderLegs() {
-  routeLayer.clearLayers();
   const p = state.project;
   const byId = Object.fromEntries(p.controls.map((c) => [c.id, c]));
   const tbody = $("#leg-table tbody");
   tbody.innerHTML = "";
+  state.legLines = [];
   let total = 0;
   const est = p.calibration.scale_confirmed ? "" : " (est.)";
-  for (const leg of p.legs || []) {
+  (p.legs || []).forEach((leg, i) => {
     const a = byId[leg.from_id], b = byId[leg.to_id];
     const name = `${a ? controlLabel(a) : "?"}–${b ? controlLabel(b) : "?"}`;
-    let line;
+    let line = null;
     if (leg.ok && leg.path.length) {
       line = L.polyline(leg.path.map(([x, y]) => ll(x, y)), { color: "#1d4ed8", weight: 3, opacity: 0.85, pmIgnore: true });
       total += leg.length_m;
     } else if (a && b) {
       line = L.polyline([ll(a.x, a.y), ll(b.x, b.y)], { color: "#dc2626", weight: 3, dashArray: "8 6", pmIgnore: true });
     }
-    if (line) line.bindTooltip(name).addTo(routeLayer);
+    if (line) line.bindTooltip(name);
+    state.legLines.push({ line, name, leg });
     const tr = document.createElement("tr");
     if (!leg.ok) tr.className = "bad";
     const len = leg.ok ? `${Math.round(leg.length_m)} m${est}` : "—";
     tr.innerHTML = `<td>${name}</td><td>${len}</td><td>${leg.ok ? "" : leg.message || "unreachable"}</td>`;
-    tr.onclick = () => line && map.fitBounds(line.getBounds(), { maxZoom: 2 });
+    tr.onclick = () => showLeg(i);
     tbody.appendChild(tr);
-  }
+  });
   $("#route-total").textContent = (p.legs || []).length ? `Total ${Math.round(total)} m${est}` : "";
+  if (state.legIndex !== null && state.legIndex >= state.legLines.length) state.legIndex = null;
+  applyLegView(false);
+}
+
+// Show all legs (index null) or only one leg; optionally zoom to it.
+function applyLegView(zoom) {
+  routeLayer.clearLayers();
+  const n = state.legLines.length;
+  const i = state.legIndex;
+  state.legLines.forEach((l, k) => {
+    if (l.line && (i === null || i === k)) l.line.addTo(routeLayer);
+  });
+  document.querySelectorAll("#leg-table tbody tr").forEach((tr, k) => tr.classList.toggle("selected", i === k));
+  $("#btn-leg-all").classList.toggle("active", i === null);
+  $("#btn-leg-prev").disabled = n === 0 || i === 0;
+  $("#btn-leg-next").disabled = n === 0 || i === n - 1;
+  if (!n) $("#leg-current").textContent = "—";
+  else if (i === null) $("#leg-current").textContent = `all ${n}`;
+  else {
+    const { name, leg } = state.legLines[i];
+    const est = state.project.calibration.scale_confirmed ? "" : " est.";
+    const len = leg.ok ? ` · ${Math.round(leg.length_m)} m${est}` : " · no route";
+    $("#leg-current").textContent = `${i + 1}/${n}: ${name}${len}`;
+  }
+  const sel = i === null ? null : state.legLines[i].line;
+  if (zoom && sel) {
+    map.fitBounds(sel.getBounds(), { padding: [40, 40], maxZoom: 2 });
+  }
+}
+
+function showLeg(i) {
+  const n = state.legLines.length;
+  if (!n) return;
+  state.legIndex = i === null ? null : Math.max(0, Math.min(n - 1, i));
+  applyLegView(state.legIndex !== null);
+  if (state.legIndex === null) map.fitBounds(imageBounds());
 }
 
 // ---------------------------------------------------------------- buttons
@@ -548,7 +587,15 @@ function bind() {
     const bad = legs.filter((l) => !l.ok).length;
     setStatus(`${legs.length} legs computed` + (bad ? `, ${bad} unreachable.` : "."), bad ? "error" : "");
   };
-  document.addEventListener("keydown", (e) => { if (e.key === "Escape") setMode(null); });
+  $("#btn-leg-all").onclick = () => showLeg(null);
+  $("#btn-leg-prev").onclick = () => showLeg(state.legIndex === null ? state.legLines.length - 1 : state.legIndex - 1);
+  $("#btn-leg-next").onclick = () => showLeg(state.legIndex === null ? 0 : state.legIndex + 1);
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape") setMode(null);
+    if (e.target.closest("input, select, textarea") || !state.legLines.length) return;
+    if (e.key === "ArrowRight") { e.preventDefault(); $("#btn-leg-next").click(); }
+    if (e.key === "ArrowLeft") { e.preventDefault(); $("#btn-leg-prev").click(); }
+  });
 }
 
 async function analyze() {
