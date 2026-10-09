@@ -25,6 +25,10 @@ th, td { text-align: left; padding: 2px 4px; border-bottom: 1px solid #eee; }
 td select { padding: 1px; }
 td button { padding: 0 5px; }
 tr.bad td { background: #fde8e8; color: #9b1c1c; }
+tr.selected td { background: #dbeafe; font-weight: 600; }
+#leg-table tbody tr { cursor: pointer; }
+#leg-current { min-width: 70px; text-align: center; }
+#btn-leg-all.active { background: #2b6cb0; color: #fff; border-color: #2b6cb0; }
 tr.unused td { color: #999; }
 #layer-toggles label { display: inline-block; margin-right: 10px; }
 .ctrl-icon { border-radius: 50%; border: 2px solid #c026d3; background: rgba(192, 38, 211, .12); color: #7e22ce; font-weight: 700; display: flex; align-items: center; justify-content: center; font-size: 11px; }

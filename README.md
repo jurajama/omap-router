@@ -56,7 +56,10 @@ code (`1-126`) or a control visited several times (`6/10-131`).
    (lengths are labelled *est.*). Enter the real scale or use *Measure…*: click
    two points and enter their distance in metres.
 7. **Route** – *Compute routes* draws the legs and lists their lengths;
-   unreachable legs are shown as red dashed lines.
+   unreachable legs are shown as red dashed lines. The whole course is shown by
+   default; step through single legs (start→1, 1→2, …) with ◀ / ▶, the ← / →
+   keys or by clicking a row in the leg table — the map then shows only that
+   leg and zooms to it. *All legs* returns to the full course.
 
 ## How it works
 

@@ -83,6 +83,12 @@
   <details open id="panel-route">
     <summary>7. Route</summary>
     <button id="btn-route" class="primary">Compute routes</button>
+    <div class="row" id="leg-nav">
+      <button id="btn-leg-all" class="active" title="Show the whole course">All legs</button>
+      <button id="btn-leg-prev" title="Previous leg (←)">◀</button>
+      <span id="leg-current" class="small">—</span>
+      <button id="btn-leg-next" title="Next leg (→)">▶</button>
+    </div>
     <table id="leg-table">
       <thead><tr><th>Leg</th><th>Length</th><th></th></tr></thead>
       <tbody></tbody>
