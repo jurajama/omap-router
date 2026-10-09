@@ -523,6 +523,15 @@ function bind() {
   $("#btn-add-control").onclick = (e) => state.project && setMode("addControl", e.target);
   $("#btn-mark-circle").onclick = (e) => state.project && setMode("circle", e.target);
   $("#btn-draw").onclick = () => state.project && map.pm.enableDraw("Polygon", { snappable: false });
+  $("#btn-edits-clear").onclick = async () => {
+    const p = state.project;
+    if (!p || !(p.edits || []).length) return;
+    if (!confirm(`Remove all ${p.edits.length} drawn polygon(s)?`)) return;
+    map.pm.disableDraw();
+    state.project = await busy("Clearing polygons", () => api("PUT", `/projects/${p.id}/edits`, []));
+    renderEdits();
+    showMessages("All polygons removed. Re-route to apply.");
+  };
   $("#btn-scale").onclick = async () => {
     if (!state.project) return;
     const scale = parseInt($("#scale").value, 10);

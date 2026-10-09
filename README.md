@@ -48,7 +48,7 @@ when leg lines do not determine the order.
    toolbar, e.g. for an out-of-bounds area the analysis missed, or *allow* over
    an automatically detected area that is actually passable. Allow polygons
    override every automatic mask, including purple hatching. Edits are stored
-   separately and survive re-analysis.
+   separately and survive re-analysis. *Clear all* removes every polygon.
 6. **Scale** – distances need the map scale. The default 1:4000 is an assumption
    (lengths are labelled *est.*). Enter the real scale or use *Measure…*: click
    two points and enter their distance in metres.
