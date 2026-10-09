@@ -140,4 +140,34 @@ def test_order_from_labels_fills_unread_number_from_leg_lines(cfg):
     assert order == [0, 1, 2, 3, 2, 4, 5]
     assert note and "3" in note
     labels[3] = lbl("1-103", [1], 103, (0, 0, 1, 1))  # misread: number 1 twice
+    order, _ = controls.order_from_labels(labels, nodes, 18.0, mask)  # both dropped, refilled from leg lines
+    assert order == [0, 1, 2, 3, 2, 4, 5]
+    labels = {1: lbl("1", [1], None, (0, 0, 1, 1))}  # too few labels to recover
     assert controls.order_from_labels(labels, nodes, 18.0, mask)[0] is None
+
+
+def test_order_from_labels_discards_misread_labels(cfg):
+    img, pts, seq = _labelled_course()
+    mask = _purple(img)
+    nodes = [("start", *pts["S"], 22.0)] + [("control", *pts[k], 18.0) for k in "ABCD"] + [("finish", *pts["F"], 21.0)]
+    lbl = controls.ControlLabel
+    box = (0, 0, 1, 1)
+    base = {1: lbl("1-101", [1], 101, box), 2: lbl("2/4-102", [2, 4], 102, box), 4: lbl("5-104", [5], 104, box)}
+    # "3-103" misread as an impossible number
+    order, note = controls.order_from_labels({**base, 3: lbl("93-103", [93], 103, box)}, nodes, 18.0, mask)
+    assert order == [0, 1, 2, 3, 2, 4, 5] and note
+    # "3-103" misread as "5": both labels claiming 5 are dropped and refilled from the leg lines
+    order, note = controls.order_from_labels({**base, 3: lbl("5", [5], None, box)}, nodes, 18.0, mask)
+    assert order == [0, 1, 2, 3, 2, 4, 5] and note
+
+
+def test_start_triangle_cut_by_image_edge_is_ignored(cfg):
+    r0 = 18.0
+    side = 7.0 * 2 * r0 / 6.0
+    img = np.full((300, 300, 3), 255, np.uint8)
+    rad = side / math.sqrt(3)
+    for cx in (rad * 0.3, 200.0):  # one clipped by the left edge, one fully inside
+        pts = [(cx + rad * math.cos(math.radians(a)), 150 + rad * math.sin(math.radians(a))) for a in (-90, 30, 150)]
+        cv2.polylines(img, [np.rint(pts).astype(np.int32)], True, (185, 70, 165), 2, cv2.LINE_AA)
+    start = controls.find_start(_mask_from(img), r0, cfg, exclude=[])
+    assert start is not None and abs(start[0] - 200) < 4

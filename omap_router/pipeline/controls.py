@@ -378,9 +378,13 @@ def find_start(
             first = order[np.r_[True, labs[order][1:] != labs[order][:-1]]]
             for j in first:
                 cands.append((float(vals[j]), float(xs[j]), float(ys[j]), side, theta))
+    h, w = mask.shape
     for sc, x, y, side, theta in sorted(cands):
         if any(math.hypot(x - ex, y - ey) < er for ex, ey, er in exclude):
             continue
+        v = _triangle_vertices(x, y, side, theta)
+        if (v[:, 0] < 0).any() or (v[:, 1] < 0).any() or (v[:, 0] > w - 1).any() or (v[:, 1] > h - 1).any():
+            continue  # cut off by the image edge (e.g. a clipped digit), not a printed start
         if _triangle_ok(mask, x, y, side, theta):
             log.info("start triangle at (%.0f, %.0f) side=%.1f score=%.2f", x, y, side, sc)
             return (x, y, side / math.sqrt(3))
@@ -614,8 +618,9 @@ def _text_lines(text: np.ndarray, r0: float) -> list[tuple[np.ndarray, tuple[int
     return out
 
 
-def _ocr_line(pytesseract, crop: np.ndarray) -> str:
-    img = np.where(crop, 0, 255).astype(np.uint8)
+def _ocr_line(pytesseract, ink: np.ndarray) -> str:
+    """OCR one line of text; ``ink`` is bool or 0..1 float (1 = text)."""
+    img = (255 * (1.0 - np.clip(ink.astype(np.float32), 0, 1))).astype(np.uint8)
     scale = 48.0 / max(1, img.shape[0])
     img = cv2.resize(img, None, fx=scale, fy=scale, interpolation=cv2.INTER_CUBIC)
     img = cv2.copyMakeBorder(img, 20, 20, 20, 20, cv2.BORDER_CONSTANT, value=255)
@@ -627,23 +632,47 @@ def _ocr_line(pytesseract, crop: np.ndarray) -> str:
 
 
 def read_labels(
-    mask: np.ndarray, nodes: list[tuple[str, float, float, float]], r0: float, cfg: Settings
+    mask: np.ndarray,
+    nodes: list[tuple[str, float, float, float]],
+    r0: float,
+    cfg: Settings,
+    score: np.ndarray | None = None,
 ) -> dict[int, ControlLabel]:
     """Read the label printed next to each control circle. Returns node index -> label.
 
     Each text line is OCR'd as a whole and parsed as ``N``, ``N-CODE`` or
     ``N/M-CODE``; labels are matched to the nearest circle (each circle gets at
-    most one label, each label at most one circle).
+    most one label, each label at most one circle). With a continuous purple
+    ``score`` (see ``overprint.purple_score``) text is OCR'd from that image,
+    which keeps glyph shapes when the hard purple classification breaks digits
+    apart; the hard mask is the fallback.
     """
     if not ocr_available():
         return {}
     import pytesseract
 
+    if score is not None:
+        mask = mask | (score >= cfg.label_score_min_ratio)
     text = _digit_mask(mask, nodes, r0)
+    h, w = text.shape
     candidates: list[tuple[float, int, ControlLabel]] = []
     for crop, box in _text_lines(text, r0):
-        raw = _ocr_line(pytesseract, crop)
-        parsed = parse_label(raw)
+        parsed, raw = None, ""
+        attempts = []
+        if score is not None:
+            pad = 2
+            x0, y0, x1, y1 = box
+            bx0, by0, bx1, by1 = max(0, x0 - pad), max(0, y0 - pad), min(w, x1 + pad), min(h, y1 + pad)
+            near = np.zeros((by1 - by0, bx1 - bx0), np.uint8)
+            near[y0 - by0 : y1 - by0, x0 - bx0 : x1 - bx0] = crop
+            near = cv2.dilate(near, np.ones((2 * pad + 1, 2 * pad + 1), np.uint8)).astype(bool)
+            attempts.append(np.where(near, score[by0:by1, bx0:bx1], 0.0))
+        attempts.append(crop)
+        for ink in attempts:
+            raw = _ocr_line(pytesseract, ink)
+            parsed = parse_label(raw)
+            if parsed is not None:
+                break
         if parsed is None:
             continue
         label = ControlLabel(raw, parsed[0], parsed[1], box)
@@ -672,17 +701,30 @@ def order_from_labels(
 ) -> tuple[list[int] | None, str | None]:
     """Course order (node indices, repeats allowed) from the printed numbers.
 
-    Up to three unread labels are filled in from the leg lines: the missing
-    numbers are tried on the unlabelled circles and the assignment with the
-    strongest leg lines wins.
+    Misread labels are discarded first: a number larger than the course can
+    have, or a number read on two circles (all labels involved). Up to three
+    unread or discarded labels are then filled in from the leg lines: the
+    missing numbers are tried on the unlabelled circles and the assignment with
+    the strongest leg lines wins.
     """
     kinds = [k for k, *_ in nodes]
     ctrl = [i for i, k in enumerate(kinds) if k == "control"]
+    labels = {i: lbl for i, lbl in labels.items() if i in ctrl}
+    max_number = len(ctrl) + sum(len(lbl.orders) - 1 for lbl in labels.values())
+    rejected = {i for i, lbl in labels.items() if max(lbl.orders) > max_number or len(set(lbl.orders)) < len(lbl.orders)}
+    seen: dict[int, list[int]] = {}
+    for idx, label in labels.items():
+        for num in label.orders:
+            seen.setdefault(num, []).append(idx)
+    for num, idxs in seen.items():
+        if len(idxs) > 1:
+            rejected.update(idxs)
+    if rejected:
+        log.info("discarding misread labels: %s", [labels[i].text for i in sorted(rejected)])
+    labels = {i: lbl for i, lbl in labels.items() if i not in rejected}
     by_number: dict[int, int] = {}
     for idx, label in labels.items():
         for num in label.orders:
-            if num in by_number:
-                return None, f"control number {num} was read twice"
             by_number[num] = idx
     if not by_number:
         return None, None
@@ -727,7 +769,9 @@ def order_from_labels(
 # ---------------------------------------------------------------- main entry
 
 
-def detect_controls(mask: np.ndarray, cfg: Settings, r0_hint: float | None = None) -> Detection:
+def detect_controls(
+    mask: np.ndarray, cfg: Settings, r0_hint: float | None = None, purple_score: np.ndarray | None = None
+) -> Detection:
     """Run the full scale-free detection on a purple mask."""
     raw = mask.astype(bool)
     mask = cv2.morphologyEx(raw.astype(np.uint8), cv2.MORPH_CLOSE, np.ones((3, 3), np.uint8)).astype(bool)
@@ -778,7 +822,7 @@ def detect_controls(mask: np.ndarray, cfg: Settings, r0_hint: float | None = Non
 
     if len(nodes) >= 2:
         # unclosed mask: closing fills the small holes of digits ("0" -> "8")
-        labels = read_labels(raw, nodes, r0, cfg)
+        labels = read_labels(raw, nodes, r0, cfg, purple_score)
         det.codes = {i: lbl.code for i, lbl in labels.items() if lbl.code is not None}
         label_order, label_note = order_from_labels(labels, nodes, r0, mask) if labels else (None, None)
         full, partial, edges = order_by_lines(mask, nodes, r0, cfg)

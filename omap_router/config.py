@@ -120,6 +120,7 @@ class Settings(BaseSettings):
     refine_radius_ratio: float = 0.15
     leg_support_min_ratio: float = 0.6
     label_max_distance_ratio: float = 3.0  # label box to circle centre, in r0
+    label_score_min_ratio: float = 0.35  # purple score that counts as text when grouping labels
     default_px_per_mm: float = 6.0  # used only when no circle is detected
 
     # --- black lines ---
