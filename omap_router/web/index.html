@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>omap-router</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+  <link rel="stylesheet" href="https://unpkg.com/@geoman-io/leaflet-geoman-free@2.17.0/dist/leaflet-geoman.css">
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+<div id="sidebar">
+  <h1>omap-router</h1>
+  <div id="status" class="status">Upload a map image to start.</div>
+
+  <details open id="panel-project">
+    <summary>1. Project</summary>
+    <input type="file" id="upload" accept="image/*">
+    <select id="project-list"><option value="">— open project —</option></select>
+    <div class="row">
+      <button id="btn-crop">Set crop…</button>
+      <button id="btn-crop-clear">Clear crop</button>
+    </div>
+    <div id="project-info" class="small"></div>
+  </details>
+
+  <details open id="panel-layers">
+    <summary>2. Layers</summary>
+    <div id="layer-toggles"></div>
+    <label>Overlay opacity <input type="range" id="opacity" min="0" max="1" step="0.05" value="0.6"></label>
+  </details>
+
+  <details id="panel-colors">
+    <summary>3. Colors</summary>
+    <div class="row">
+      <select id="sample-class"></select>
+      <button id="btn-sample" class="toggle">Pick samples</button>
+    </div>
+    <div id="sample-summary" class="small"></div>
+    <div class="row">
+      <button id="btn-sample-clear">Clear class</button>
+      <button id="btn-analyze" class="primary">Re-analyze</button>
+    </div>
+  </details>
+
+  <details open id="panel-controls">
+    <summary>4. Controls</summary>
+    <div class="row">
+      <button id="btn-detect" class="primary">Detect controls</button>
+      <button id="btn-add-control" class="toggle">Add by click</button>
+      <button id="btn-mark-circle" class="toggle" title="Click the centre, then the edge of one control circle">Mark circle</button>
+    </div>
+    <div id="r0-info" class="small"></div>
+    <table id="control-table">
+      <thead><tr><th>#</th><th>use</th><th>kind</th><th></th></tr></thead>
+      <tbody></tbody>
+    </table>
+    <div class="small">Drag markers to move. Right-click a marker to delete it.</div>
+  </details>
+
+  <details id="panel-edits">
+    <summary>5. Edits</summary>
+    <div class="row">
+      <label><input type="radio" name="edit-kind" value="forbid" checked> forbid</label>
+      <label><input type="radio" name="edit-kind" value="allow"> allow</label>
+      <button id="btn-draw">Draw polygon</button>
+    </div>
+    <div class="small">Use the map toolbar to edit or delete polygons. Changes are saved automatically; re-route to apply.</div>
+    <div id="edit-summary" class="small"></div>
+  </details>
+
+  <details open id="panel-scale">
+    <summary>6. Scale</summary>
+    <div class="row">
+      1 : <input type="number" id="scale" min="500" step="500" value="4000">
+      <button id="btn-scale">Set</button>
+      <button id="btn-measure" class="toggle">Measure…</button>
+    </div>
+    <div id="scale-info" class="small"></div>
+  </details>
+
+  <details open id="panel-route">
+    <summary>7. Route</summary>
+    <button id="btn-route" class="primary">Compute routes</button>
+    <table id="leg-table">
+      <thead><tr><th>Leg</th><th>Length</th><th></th></tr></thead>
+      <tbody></tbody>
+    </table>
+    <div id="route-total" class="small"></div>
+  </details>
+</div>
+<div id="map"></div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://unpkg.com/@geoman-io/leaflet-geoman-free@2.17.0/dist/leaflet-geoman.min.js"></script>
+<script src="/static/app.js"></script>
+</body>
+</html>
