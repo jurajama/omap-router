@@ -30,7 +30,7 @@ def _analyse(img_bgr, cfg: Settings):
     ppm = det.px_per_mm or cfg.default_px_per_mm
     tl = overprint.remove_purple(labels, purple, cfg.purple_dilate_px)
     bar = lines.barrier_mask(tl, ppm, cfg)
-    forb = terrain.auto_forbidden(tl, bar, ppm, cfg)
+    forb = terrain.auto_forbidden(tl, bar, ppm, cfg, overprint.hatch_mask(purple, ppm, cfg))
     return det, forb
 
 

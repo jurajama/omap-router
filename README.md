@@ -4,8 +4,8 @@ Web application that takes a scanned or photographed **sprint orienteering map**
 (ISSprOM style, JPG/PNG/WebP), finds the course (start, controls, finish), builds
 a passability/cost model of the terrain and computes a least-cost route for
 every leg. Routes prefer roads and paved areas and never cross forbidden areas
-(buildings, olive out-of-bounds, water, impassable walls/fences, and polygons you
-draw). You review and correct everything in the browser.
+(buildings, olive out-of-bounds, water, impassable walls/fences, purple
+cross-hatched out-of-bounds areas, and polygons you draw). You review and correct everything in the browser.
 
 ## Run with Docker
 
@@ -34,7 +34,7 @@ when leg lines do not determine the order.
 
 1. **Project** – upload a map image (analysis starts automatically) or open an
    existing project. Optionally set a crop rectangle (two clicks) and re-analyze.
-2. **Layers** – toggle `labels`, `forbidden`, `purple`, `barriers`, `cost`,
+2. **Layers** – toggle `labels`, `forbidden`, `purple`, `hatch`, `barriers`, `cost`,
    routes and controls; adjust overlay opacity.
 3. **Colors** – if the classification is off (check the `labels` layer), pick a
    class, click on the map to add colour samples and press *Re-analyze*.
@@ -45,8 +45,10 @@ when leg lines do not determine the order.
    found, use *Mark circle* (click a circle's centre, then its ring) to tell the
    app the circle size.
 5. **Edits** – draw *forbid* (red) or *allow* (green) polygons with the map
-   toolbar, e.g. for out-of-bounds hatching or a passage the analysis missed.
-   Edits are stored separately and survive re-analysis.
+   toolbar, e.g. for an out-of-bounds area the analysis missed, or *allow* over
+   an automatically detected area that is actually passable. Allow polygons
+   override every automatic mask, including purple hatching. Edits are stored
+   separately and survive re-analysis.
 6. **Scale** – distances need the map scale. The default 1:4000 is an assumption
    (lengths are labelled *est.*). Enter the real scale or use *Measure…*: click
    two points and enter their distance in metres.
@@ -64,10 +66,10 @@ thresholds in [`config.py`](omap_router/config.py) are in printed millimetres.
 |---|---|---|
 | 8.1 | `pipeline/preprocess.py` | crop, bilateral filter, white balance |
 | 8.2 | `pipeline/segment.py` | nearest reference colour in Lab (several shades per class, user samples override), unknown pixels filled by 3×3 majority |
-| 8.3 | `pipeline/overprint.py` | purple mask; purple pixels replaced by the nearest non-purple label |
+| 8.3 | `pipeline/overprint.py` | purple mask; purple pixels replaced by the nearest non-purple label; purple cross-hatching detected as out-of-bounds (components enclosing many small cells, or dense purple texture with many enclosed gaps, opened to drop attached leg lines) |
 | 8.4 | `pipeline/controls.py` | wide Hough search → ring verification (support, empty inside/outside, thin stroke, sector coverage) → radius consensus `r0` → narrow re-search; finish = concentric ring pair; start = chamfer-matched rotated triangle; order = path through the leg-line graph that visits every point (DFS, threshold relaxed if lines are cut), OCR fallback |
 | 8.5 | `pipeline/lines.py` | black strokes skeletonised, width = area / length per segment, thick strokes become barriers; building outlines and small symbols ignored |
-| 8.6 | `pipeline/terrain.py` | forbidden = grey ∪ olive ∪ water (thin blue north lines removed) ∪ barriers ∪ forbid polygons − allow polygons; cost grid where a cell is forbidden only if all its pixels are, or if a barrier crosses it |
+| 8.6 | `pipeline/terrain.py` | forbidden = grey ∪ olive ∪ water (thin blue north lines removed) ∪ barriers ∪ purple hatching ∪ forbid polygons − allow polygons; cost grid where a cell is forbidden only if all its pixels are, or if a barrier crosses it |
 | 8.7 | `pipeline/routing.py` | `skimage.graph.MCP_Geometric` per leg between snapped endpoints, simplified with shapely and re-checked against the forbidden cells |
 
 Default costs: paved 1.0; white/yellow/brown/thin black 1.2; green 3.0; unknown 1.5.
@@ -84,7 +86,7 @@ Base `/api`, JSON unless noted. Pixel coordinates are always original-image `(x,
 | PUT | `/projects/{id}/color-samples` | `{"BEIGE": [[x, y], …], …}` |
 | POST | `/projects/{id}/analyze` | run 8.1–8.6 → `{project, layers}` |
 | GET | `/projects/{id}/image` | original image |
-| GET | `/projects/{id}/layers/{name}.png` | RGBA overlay: `labels`, `forbidden`, `purple`, `barriers`, `cost` |
+| GET | `/projects/{id}/layers/{name}.png` | RGBA overlay: `labels`, `forbidden`, `purple`, `hatch`, `barriers`, `cost` |
 | POST | `/projects/{id}/controls/detect` | run 8.4 |
 | PUT | `/projects/{id}/controls` | replace the control list |
 | PUT | `/projects/{id}/calibration` | `{"scale": 4000}`, `{"p1": [x, y], "p2": [x, y], "meters": 120}` or `{"r0": 17.5}` |
@@ -105,8 +107,10 @@ forbidden), `passages.png` (white = narrow passages that must stay open) and
 
 ## Known limitations
 
-- Purple or magenta cross-hatching (out-of-bounds overprint) is not detected
-  automatically; draw a forbid polygon over it.
+- Hatch detection follows the drawn grid, so the edge of a detected area can be
+  about half a grid cell inside or outside the printed boundary, and very
+  small hatched patches (under ~3 mm) are ignored. Correct these with forbid or
+  allow polygons. Set `OMAP_HATCH_ENABLED=false` to turn detection off.
 - Routing uses an 8-connected grid, which overestimates oblique distances by up
   to ~8 %, so a road is preferred when it is roughly 10–20 % longer than the
   direct line, depending on its direction.

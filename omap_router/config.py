@@ -42,7 +42,7 @@ DEFAULT_REFERENCE_COLORS: dict[str, list[RGB]] = {
     "OLIVE": [(172, 158, 55), (143, 170, 36)],
     "GREY": [(149, 144, 141), (123, 119, 114), (180, 180, 180)],
     "BLACK": [(40, 30, 13), (20, 20, 20)],
-    "PURPLE": [(165, 70, 185), (167, 87, 187), (190, 110, 210), (195, 95, 140)],  # last: thin purple over yellow
+    "PURPLE": [(165, 70, 185), (167, 87, 187), (190, 110, 210), (195, 95, 140), (160, 85, 115)],  # thin purple over yellow / olive
     "BROWN": [(182, 141, 86), (162, 134, 104), (200, 168, 132)],
     "BLUE": [(2, 171, 235), (0, 211, 211), (72, 224, 225)],
 }
@@ -84,6 +84,14 @@ class Settings(BaseSettings):
 
     # --- overprint ---
     purple_dilate_px: int = 1  # catch anti-aliased overprint edges
+    hatch_enabled: bool = True  # purple cross-hatching -> forbidden
+    hatch_min_holes: int = 6
+    hatch_hole_min_mm: float = 0.25  # side of a hatch cell
+    hatch_hole_max_mm: float = 2.5
+    hatch_min_size_mm: float = 3.0  # smaller purple components are never hatches
+    hatch_window_mm: float = 2.0  # density window for fine/fragmented hatching
+    hatch_density_min_ratio: float = 0.2
+    hatch_open_mm: float = 2.5
 
     # --- controls (ISSprOM printed sizes) ---
     control_diameter_mm: float = 6.0

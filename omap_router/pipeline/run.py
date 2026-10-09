@@ -121,11 +121,20 @@ def _terrain(project: Project, cfg: Settings) -> dict[str, np.ndarray]:
     with _timed("overprint"):
         purple = overprint.purple_mask(labels)
         tlabels = overprint.remove_purple(labels, purple, cfg.purple_dilate_px)
+        hatch = overprint.hatch_mask(purple, ppm, cfg) if cfg.hatch_enabled else np.zeros(purple.shape, bool)
     with _timed("lines"):
         barrier = lines.barrier_mask(tlabels, ppm, cfg)
     with _timed("forbidden"):
-        forb = terrain.auto_forbidden(tlabels, barrier, ppm, cfg)
-    out = {"labels": labels, "terrain_labels": tlabels, "purple": purple, "barrier": barrier, "forbidden": forb}
+        forb = terrain.auto_forbidden(tlabels, barrier, ppm, cfg, hatch)
+    log.info("hatched out-of-bounds: %d px", int(hatch.sum()))
+    out = {
+        "labels": labels,
+        "terrain_labels": tlabels,
+        "purple": purple,
+        "hatch": hatch,
+        "barrier": barrier,
+        "forbidden": forb,
+    }
     storage.cache_save(project.id, "terrain", key, out)
     return out
 
@@ -150,6 +159,7 @@ def _render_layers(project: Project, t: dict[str, np.ndarray], grid: terrain.Cos
         render.write_png(d / "labels.png", render.labels_rgba(t["labels"]), full, off)
         render.write_png(d / "forbidden.png", render.mask_rgba(forb, (230, 0, 0), 170), full, off)
         render.write_png(d / "purple.png", render.mask_rgba(t["purple"], (200, 0, 200), 255), full, off)
+        render.write_png(d / "hatch.png", render.mask_rgba(t["hatch"], (255, 120, 0), 200), full, off)
         render.write_png(d / "barriers.png", render.mask_rgba(t["barrier"], (0, 60, 255), 255), full, off)
         render.write_png(d / "cost.png", render.cost_rgba(grid.cost, grid.cell_px, forb.shape), full, off)
     return list(render.LAYER_NAMES)

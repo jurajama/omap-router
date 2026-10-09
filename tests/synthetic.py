@@ -40,6 +40,21 @@ def _boundary_point(kind: str, x: float, y: float, toward: tuple[float, float], 
     return x + ux * rad, y + uy * rad
 
 
+def draw_hatch(img: np.ndarray, box: tuple[int, int, int, int], ppm: float, spacing_mm: float = 1.6) -> None:
+    """Diagonal purple grid clipped to ``box`` (x0, y0, x1, y1)."""
+    x0, y0, x1, y1 = box
+    layer = np.zeros(img.shape[:2], np.uint8)
+    step = max(4, int(round(spacing_mm * ppm)))
+    stroke = max(1, int(round(0.2 * ppm)))
+    span = (x1 - x0) + (y1 - y0)
+    for d in range(-span, span, step):
+        cv2.line(layer, (x0 + d, y0), (x0 + d + span, y0 + span), 1, stroke, cv2.LINE_AA)
+        cv2.line(layer, (x0 + d, y1), (x0 + d + span, y1 - span), 1, stroke, cv2.LINE_AA)
+    clip = np.zeros_like(layer)
+    clip[y0 : y1 + 1, x0 : x1 + 1] = 1
+    img[(layer > 0) & (clip > 0)] = bgr(PURPLE)
+
+
 def draw_course(img: np.ndarray, course: list[tuple[str, float, float]], r0: float, numbers: bool = True) -> None:
     ppm = 2 * r0 / 6.0
     stroke = max(1, int(round(0.35 * ppm)))
@@ -99,6 +114,10 @@ def make_map(seed: int = 0, r0: float = 18.0, noise: float = 4.0) -> SyntheticMa
     # magnetic north lines (thin blue, passable)
     for x in (150, 450, 750):
         cv2.line(img, (x, 0), (x, 560), bgr(BLUE), 1)
+
+    # purple cross-hatched out-of-bounds area (forbidden)
+    draw_hatch(img, (250, 335, 400, 405), ppm)
+    cv2.rectangle(forb, (250, 335), (400, 405), 1, -1)
 
     course = [
         ("start", 300.0, 220.0),

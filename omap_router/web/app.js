@@ -1,7 +1,7 @@
 /* omap-router single page UI. Coordinates sent to the API are original-image pixels (x, y). */
 "use strict";
 
-const LAYERS = ["labels", "forbidden", "purple", "barriers", "cost"];
+const LAYERS = ["labels", "forbidden", "purple", "hatch", "barriers", "cost"];
 const CLASSES = ["WHITE", "YELLOW", "BEIGE", "GREEN", "OLIVE", "GREY", "BLACK", "PURPLE", "BROWN", "BLUE"];
 const CLASS_COLORS = {
   WHITE: "#fff", YELLOW: "#f7be50", BEIGE: "#ebcdaa", GREEN: "#6ec864", OLIVE: "#a0a028",

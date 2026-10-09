@@ -44,9 +44,14 @@ def water_mask(labels: np.ndarray, px_per_mm: float, cfg: Settings) -> np.ndarra
     return cv2.morphologyEx(blue, cv2.MORPH_OPEN, kernel).astype(bool)
 
 
-def auto_forbidden(labels: np.ndarray, barrier: np.ndarray, px_per_mm: float, cfg: Settings) -> np.ndarray:
-    """Forbidden mask from map content only: buildings (+outline), olive, water, barriers."""
+def auto_forbidden(
+    labels: np.ndarray, barrier: np.ndarray, px_per_mm: float, cfg: Settings, hatch: np.ndarray | None = None
+) -> np.ndarray:
+    """Forbidden mask from map content only: buildings (+outline), olive, water,
+    barriers and purple-hatched out-of-bounds areas."""
     forb = (labels == TerrainClass.GREY) | (labels == TerrainClass.OLIVE)
+    if hatch is not None:
+        forb |= hatch
     forb |= building_outline(labels, 1)
     forb |= water_mask(labels, px_per_mm, cfg)
     forb |= barrier

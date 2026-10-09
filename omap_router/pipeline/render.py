@@ -9,7 +9,7 @@ import numpy as np
 
 from ..config import CLASS_DISPLAY_COLORS, TerrainClass
 
-LAYER_NAMES = ("labels", "forbidden", "purple", "barriers", "cost")
+LAYER_NAMES = ("labels", "forbidden", "purple", "hatch", "barriers", "cost")
 
 
 def _place(rgba: np.ndarray, full_shape: tuple[int, int], offset: tuple[int, int]) -> np.ndarray:
