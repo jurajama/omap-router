@@ -9,6 +9,19 @@ from scipy import ndimage
 from ..config import TerrainClass
 
 
+def purple_score(rgb: np.ndarray) -> np.ndarray:
+    """Continuous "purpleness" 0..1 from CIE Lab (high a*, low b*).
+
+    Course overprint is the only strongly magenta colour on a map; pure
+    overprint scores 1, overprint blended with white/yellow/olive about
+    0.3–0.8, and map colours (olive, yellow, brown, grey, blue, green) 0.
+    """
+    from .segment import rgb_to_lab
+
+    lab = rgb_to_lab(rgb)
+    return np.clip((lab[..., 1] - 0.5 * lab[..., 2] - 10.0) / 50.0, 0.0, 1.0).astype(np.float32)
+
+
 def purple_mask(labels: np.ndarray) -> np.ndarray:
     return labels == TerrainClass.PURPLE
 

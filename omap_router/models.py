@@ -16,6 +16,7 @@ class Control(BaseModel):
     x: float  # pixel coords in original image
     y: float
     r: float = 0.0  # detected radius px
+    code: int | None = None  # printed control code, e.g. 126 in "1-126"
     source: Literal["auto", "user"] = "auto"
 
 

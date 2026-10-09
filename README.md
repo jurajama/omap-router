@@ -29,8 +29,9 @@ OMAP_DATA_DIR=./data uv run uvicorn omap_router.api.app:app --reload --port 8000
 uv run pytest
 ```
 
-Optional: install `tesseract-ocr` for the OCR fallback that reads control numbers
-when leg lines do not determine the order.
+Optional: install `tesseract-ocr` (included in the Docker image) to read the
+printed control labels. Labels can be plain numbers (`7`), number plus control
+code (`1-126`) or a control visited several times (`6/10-131`).
 
 ## Workflow in the UI
 
@@ -69,7 +70,7 @@ thresholds in [`config.py`](omap_router/config.py) are in printed millimetres.
 | 8.1 | `pipeline/preprocess.py` | crop, bilateral filter, white balance |
 | 8.2 | `pipeline/segment.py` | nearest reference colour in Lab (several shades per class, user samples override), unknown pixels filled by 3×3 majority |
 | 8.3 | `pipeline/overprint.py` | purple mask; purple pixels replaced by the nearest non-purple label; purple cross-hatching detected as out-of-bounds (components enclosing many small cells, or dense purple texture with many enclosed gaps, opened to drop attached leg lines) |
-| 8.4 | `pipeline/controls.py` | wide Hough search → ring verification (support, empty inside/outside, thin stroke, sector coverage) → radius consensus `r0` → narrow re-search; finish = concentric ring pair; start = chamfer-matched rotated triangle; order = path through the leg-line graph that visits every point (DFS, threshold relaxed if lines are cut), OCR fallback |
+| 8.4 | `pipeline/controls.py` | wide Hough search → ring verification (support, empty inside/outside, thin stroke, sector coverage) → radius consensus `r0` → narrow re-search; finish = concentric ring pair; start = chamfer-matched rotated triangle; order = printed labels read with OCR (`N`, `N-CODE`, `N/M-CODE`; a control visited twice becomes two course entries, up to three unreadable labels are inferred from the leg lines) and/or a path through the leg-line graph that visits every point (DFS, threshold relaxed if lines are cut); if both give a complete but different order, the one the leg lines support better wins |
 | 8.5 | `pipeline/lines.py` | black strokes skeletonised; a stroke is a barrier if its black area / length ≥ `thick_line_mm`, or if its lightness profile across the line is wide enough (full width at half depth ≥ √(thick² + blur²), averaged along the line) — the second test catches thick walls on blurry low-resolution scans whose edges are classified grey/brown, while thin road edges and paths stay passable; building outlines (black next to solid grey only) and small symbols ignored |
 | 8.6 | `pipeline/terrain.py` | forbidden = grey ∪ olive ∪ water (thin blue north lines removed) ∪ barriers ∪ purple hatching ∪ outside the map ∪ forbid polygons − allow polygons; outside the map = white paper not enclosed by map content (content closed over gaps up to 5 mm, holes filled); cost grid where a cell is forbidden only if all its pixels are, or if a barrier crosses it |
 | 8.7 | `pipeline/routing.py` | `skimage.graph.MCP_Geometric` per leg between snapped endpoints, simplified with shapely and re-checked against the forbidden cells |
@@ -120,8 +121,10 @@ forbidden), `passages.png` (white = narrow passages that must stay open) and
 - Routing uses an 8-connected grid, which overestimates oblique distances by up
   to ~8 %, so a road is preferred when it is roughly 10–20 % longer than the
   direct line, depending on its direction.
-- The OCR fallback misreads some control numbers. It is used only when it yields
-  a complete and consistent 1…n numbering; otherwise you order the controls by hand.
+- OCR misreads some control numbers. The printed numbers are used only when they
+  form a complete, consistent 1…n numbering (with at most three gaps filled from
+  the leg lines); otherwise the leg lines decide, or you order the controls by hand.
+  A revisited control gets one marker per visit at the same spot.
 - Very low resolution scans (control circle radius below ~8 px) make the
   thick/thin line distinction unreliable; use forbid polygons for missed walls.
   The blur allowance `OMAP_LINE_BLUR_PX` (default 2 px) suits soft scans; for

@@ -72,10 +72,21 @@ def _segmentation(project: Project, cfg: Settings) -> tuple[np.ndarray, str]:
 
 def _segmentation_full(project: Project, cfg: Settings) -> tuple[np.ndarray, np.ndarray, str]:
     """Stages 8.1 + 8.2 (cached). Returns (labels, lightness L*, cache key)."""
+    labels, lightness, _score, key = _segmentation_all(project, cfg)
+    return labels, lightness, key
+
+
+def _segmentation_all(project: Project, cfg: Settings) -> tuple[np.ndarray, np.ndarray, np.ndarray, str]:
+    """Stages 8.1 + 8.2 (cached). Returns (labels, lightness L*, purple score, cache key)."""
     key = _key("seg", _image_sha(project), project.crop, project.color_samples, _cfg_dump(cfg))
     cached = storage.cache_load(project.id, "segment", key)
-    if cached is not None and "lightness" in cached:
-        return cached["labels"], cached["lightness"].astype(np.float32), key
+    if cached is not None and "lightness" in cached and "purple_score" in cached:
+        return (
+            cached["labels"],
+            cached["lightness"].astype(np.float32),
+            cached["purple_score"].astype(np.float32),
+            key,
+        )
     img = storage.load_image_bgr(project)
     with _timed("preprocess"):
         rgb = preprocess.preprocess(img, project.crop, cfg)
@@ -83,8 +94,14 @@ def _segmentation_full(project: Project, cfg: Settings) -> tuple[np.ndarray, np.
         refs = segment.reference_colors(rgb, cfg, project.color_samples, _offset(project))
         labels = segment.segment(rgb, refs, cfg)
     lightness = segment.rgb_to_lab(rgb)[..., 0]
-    storage.cache_save(project.id, "segment", key, {"labels": labels, "lightness": lightness.astype(np.float16)})
-    return labels, lightness, key
+    score = overprint.purple_score(rgb)
+    storage.cache_save(
+        project.id,
+        "segment",
+        key,
+        {"labels": labels, "lightness": lightness.astype(np.float16), "purple_score": score.astype(np.float16)},
+    )
+    return labels, lightness, score, key
 
 
 def _purple_for_detection(labels: np.ndarray) -> np.ndarray:
@@ -196,10 +213,10 @@ def detect_controls(project: Project, cfg: Settings | None = None) -> Project:
     """Run 8.4 and replace the control list."""
     cfg = cfg or get_settings()
     project.messages = []
-    labels, _ = _segmentation(project, cfg)
+    labels, _, score, _ = _segmentation_all(project, cfg)
     hint = project.calibration.r0 if project.calibration.r0_source == "user" else None
     with _timed("controls"):
-        det = controls_mod.detect_controls(_purple_for_detection(labels), cfg, r0_hint=hint)
+        det = controls_mod.detect_controls(_purple_for_detection(labels), cfg, r0_hint=hint, purple_score=score)
     project.messages.extend(det.messages)
     cal = project.calibration
     if det.r0 is not None:
@@ -208,20 +225,32 @@ def detect_controls(project: Project, cfg: Settings | None = None) -> Project:
             cal.r0_source = "auto"
         cal.px_per_mm = px_per_mm_from_r0(cal.r0, cfg)
     ox, oy = _offset(project)
-    order_pos = {node: i for i, node in enumerate(det.order or [])}
+    # a control visited more than once ("6/10-131") becomes one course entry per visit
+    positions: dict[int, list[int]] = {}
+    for pos, node in enumerate(det.order or []):
+        positions.setdefault(node, []).append(pos)
     ctrls: list[Control] = []
+    extra_id = len(det.nodes)
     for idx, (kind, x, y, r) in enumerate(det.nodes):
-        ctrls.append(
-            Control(
-                id=idx + 1,
-                order=order_pos.get(idx),
-                kind=kind,  # type: ignore[arg-type]
-                x=float(x) + ox,
-                y=float(y) + oy,
-                r=float(r),
-                source="auto",
+        visits = positions.get(idx) or [None]
+        for n, pos in enumerate(visits):
+            if n == 0:
+                cid = idx + 1
+            else:
+                extra_id += 1
+                cid = extra_id
+            ctrls.append(
+                Control(
+                    id=cid,
+                    order=pos,
+                    kind=kind,  # type: ignore[arg-type]
+                    x=float(x) + ox,
+                    y=float(y) + oy,
+                    r=float(r),
+                    code=det.codes.get(idx),
+                    source="auto",
+                )
             )
-        )
     project.controls = ctrls
     project.legs = []
     log.info("detected %d course points (r0=%s)", len(ctrls), cal.r0)

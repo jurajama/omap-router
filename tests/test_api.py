@@ -185,3 +185,24 @@ def test_blocked_leg_is_unreachable_not_routed_around_map(client):
     assert first["path"] == []
     assert "no route" in first["message"]
     assert not any(in_margin(x, y) for leg in legs for x, y in leg["path"])
+
+
+def test_labels_with_codes_create_one_entry_per_visit(client):
+    from test_controls import _labelled_course
+
+    from omap_router.pipeline.controls import ocr_available
+
+    if not ocr_available():
+        pytest.skip("tesseract not installed")
+    img, pts, seq = _labelled_course()
+    ok, png = cv2.imencode(".png", img)
+    pid = client.post("/api/projects", files={"file": ("map.png", png.tobytes(), "image/png")}).json()["id"]
+    client.post(f"/api/projects/{pid}/analyze")
+    p = client.post(f"/api/projects/{pid}/controls/detect").json()
+    course = sorted((c for c in p["controls"] if c["order"] is not None), key=lambda c: c["order"])
+    assert [c["code"] for c in course] == [None, 101, 102, 103, 102, 104, None]
+    assert len({c["id"] for c in course}) == len(course)
+    b1, b2 = course[2], course[4]
+    assert (b1["x"], b1["y"]) == (b2["x"], b2["y"])
+    legs = client.post(f"/api/projects/{pid}/route").json()
+    assert len(legs) == len(seq) - 1 and all(leg["ok"] for leg in legs)
