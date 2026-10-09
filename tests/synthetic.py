@@ -81,7 +81,9 @@ def draw_course(img: np.ndarray, course: list[tuple[str, float, float]], r0: flo
         cv2.line(img, (int(round(p1[0])), int(round(p1[1]))), (int(round(p2[0])), int(round(p2[1]))), col, stroke, cv2.LINE_AA)
 
 
-def make_map(seed: int = 0, r0: float = 18.0, noise: float = 4.0) -> SyntheticMap:
+def make_map(seed: int = 0, r0: float = 18.0, noise: float = 4.0, margin: int = 0) -> SyntheticMap:
+    """Synthetic sprint map with a black frame. ``margin`` adds blank paper
+    (outside the map, ground-truth forbidden) around the frame."""
     rng = np.random.default_rng(seed)
     h, w = 700, 900
     ppm = 2 * r0 / 6.0
@@ -129,6 +131,12 @@ def make_map(seed: int = 0, r0: float = 18.0, noise: float = 4.0) -> SyntheticMa
     ]
     draw_course(img, course, r0)
 
+    cv2.rectangle(img, (0, 0), (w - 1, h - 1), bgr(BLACK), 2)  # map frame
+    if margin:
+        img = cv2.copyMakeBorder(img, margin, margin, margin, margin, cv2.BORDER_CONSTANT, value=bgr(WHITE))
+        forb = cv2.copyMakeBorder(forb, margin, margin, margin, margin, cv2.BORDER_CONSTANT, value=1)
+        road = cv2.copyMakeBorder(road, margin, margin, margin, margin, cv2.BORDER_CONSTANT, value=0)
+        course = [(k, x + margin, y + margin) for k, x, y in course]
     img = cv2.GaussianBlur(img, (3, 3), 0.6)
     if noise > 0:
         img = np.clip(img.astype(np.float32) + rng.normal(0, noise, img.shape), 0, 255).astype(np.uint8)

@@ -183,3 +183,28 @@ def test_random_maps_paths_never_cross_forbidden(seed, cfg):
         res = routing.route_leg(g, snap, a, b)
         if res.ok:
             _assert_path_passable(g, res)
+
+
+# ---------------------------------------------------------------- blank paper outside the map
+
+
+def test_outside_map_detected_and_inside_white_kept(cfg):
+    lab = np.full((300, 400), int(TerrainClass.WHITE), np.uint8)
+    # mapped area: a road ring with white "forest" inside and some contour lines
+    cv2.rectangle(lab, (80, 60), (320, 240), int(TerrainClass.BEIGE), 6)
+    cv2.line(lab, (80, 150), (320, 150), int(TerrainClass.BROWN), 1)
+    lab[:, 30] = TerrainClass.BLUE  # magnetic north line through the blank paper
+    out = terrain.outside_map_mask(lab, 6.0, cfg)
+    assert out[10:40, 150:250].all()  # blank paper above the map
+    assert out[100:200, 5:25].all()  # left of the north line
+    assert not out[90:140, 120:280].any()  # white terrain inside the map
+    assert not out[lab != TerrainClass.WHITE].any()
+
+
+def test_outside_map_mask_empty_for_map_filling_the_image(cfg, synth):
+    from omap_router.pipeline import overprint, preprocess, segment
+
+    rgb = preprocess.preprocess(synth.image, None, cfg)
+    labels = segment.segment(rgb, segment.reference_colors(rgb, cfg), cfg)
+    tl = overprint.remove_purple(labels, overprint.purple_mask(labels), 1)
+    assert terrain.outside_map_mask(tl, 6.0, cfg).mean() < 0.01

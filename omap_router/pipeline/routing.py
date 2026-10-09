@@ -106,7 +106,7 @@ def route_leg(grid: CostGrid, snapper: Snapper, a: tuple[float, float], b: tuple
     costs, _ = mcp.find_costs([sa], [sb], find_all_ends=True)
     total = float(costs[sb])
     if not np.isfinite(total):
-        return LegResult(False, [], math.inf, "unreachable: destination is enclosed by forbidden areas")
+        return LegResult(False, [], math.inf, "no route: forbidden areas separate these controls")
     cells = mcp.traceback(sb)
     pts = [rc_to_xy(r, c, grid.cell_px) for r, c in cells]
     pts = simplify(grid, pts)

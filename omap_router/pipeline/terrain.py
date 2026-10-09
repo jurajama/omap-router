@@ -6,6 +6,7 @@ from dataclasses import dataclass
 
 import cv2
 import numpy as np
+from scipy import ndimage
 
 from ..config import Settings, TerrainClass, class_cost
 from ..models import EditPolygon
@@ -44,14 +45,51 @@ def water_mask(labels: np.ndarray, px_per_mm: float, cfg: Settings) -> np.ndarra
     return cv2.morphologyEx(blue, cv2.MORPH_OPEN, kernel).astype(bool)
 
 
+def outside_map_mask(labels: np.ndarray, px_per_mm: float, cfg: Settings) -> np.ndarray:
+    """Blank paper around the mapped area.
+
+    Map content (anything that is not white) is closed with a kernel of
+    ``map_gap_mm`` and holes are filled; white regions that stay outside are
+    unmapped. White areas inside the map (open land, forest with contours,
+    courtyards) are enclosed by content and therefore kept. Thin blue/green
+    lines (magnetic north lines) run across the blank paper, so they do not
+    count as content.
+    """
+    white = labels == TerrainClass.WHITE
+    content = ~white
+    k_thin = max(3, int(round(cfg.water_min_width_mm * px_per_mm)))
+    thin_kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (k_thin, k_thin))
+    for cls in (TerrainClass.BLUE, TerrainClass.GREEN):
+        m = (labels == cls).astype(np.uint8)
+        thin = m.astype(bool) & ~cv2.morphologyEx(m, cv2.MORPH_OPEN, thin_kernel).astype(bool)
+        content &= ~thin
+    if not content.any():
+        return np.zeros(labels.shape, bool)
+    k = max(3, int(round(cfg.map_gap_mm * px_per_mm)) | 1)
+    kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (k, k))
+    # pad so content near the image border is not closed against the edge
+    pad = k
+    padded = cv2.copyMakeBorder(content.astype(np.uint8), pad, pad, pad, pad, cv2.BORDER_CONSTANT, value=0)
+    closed = cv2.morphologyEx(padded, cv2.MORPH_CLOSE, kernel)[pad:-pad, pad:-pad].astype(bool)
+    mapped = ndimage.binary_fill_holes(closed)
+    return white & ~mapped
+
+
 def auto_forbidden(
-    labels: np.ndarray, barrier: np.ndarray, px_per_mm: float, cfg: Settings, hatch: np.ndarray | None = None
+    labels: np.ndarray,
+    barrier: np.ndarray,
+    px_per_mm: float,
+    cfg: Settings,
+    hatch: np.ndarray | None = None,
+    outside: np.ndarray | None = None,
 ) -> np.ndarray:
     """Forbidden mask from map content only: buildings (+outline), olive, water,
-    barriers and purple-hatched out-of-bounds areas."""
+    barriers, purple-hatched out-of-bounds areas and blank paper outside the map."""
     forb = (labels == TerrainClass.GREY) | (labels == TerrainClass.OLIVE)
     if hatch is not None:
         forb |= hatch
+    if outside is not None:
+        forb |= outside
     forb |= building_outline(labels, 1)
     forb |= water_mask(labels, px_per_mm, cfg)
     forb |= barrier

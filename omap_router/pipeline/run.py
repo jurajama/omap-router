@@ -125,13 +125,18 @@ def _terrain(project: Project, cfg: Settings) -> dict[str, np.ndarray]:
     with _timed("lines"):
         barrier = lines.barrier_mask(tlabels, ppm, cfg)
     with _timed("forbidden"):
-        forb = terrain.auto_forbidden(tlabels, barrier, ppm, cfg, hatch)
-    log.info("hatched out-of-bounds: %d px", int(hatch.sum()))
+        if cfg.outside_map_enabled:
+            outside = terrain.outside_map_mask(tlabels, ppm, cfg)
+        else:
+            outside = np.zeros(tlabels.shape, bool)
+        forb = terrain.auto_forbidden(tlabels, barrier, ppm, cfg, hatch, outside)
+    log.info("hatched out-of-bounds: %d px, outside map: %d px", int(hatch.sum()), int(outside.sum()))
     out = {
         "labels": labels,
         "terrain_labels": tlabels,
         "purple": purple,
         "hatch": hatch,
+        "outside": outside,
         "barrier": barrier,
         "forbidden": forb,
     }
@@ -160,6 +165,7 @@ def _render_layers(project: Project, t: dict[str, np.ndarray], grid: terrain.Cos
         render.write_png(d / "forbidden.png", render.mask_rgba(forb, (230, 0, 0), 170), full, off)
         render.write_png(d / "purple.png", render.mask_rgba(t["purple"], (200, 0, 200), 255), full, off)
         render.write_png(d / "hatch.png", render.mask_rgba(t["hatch"], (255, 120, 0), 200), full, off)
+        render.write_png(d / "outside.png", render.mask_rgba(t["outside"], (90, 90, 90), 170), full, off)
         render.write_png(d / "barriers.png", render.mask_rgba(t["barrier"], (0, 60, 255), 255), full, off)
         render.write_png(d / "cost.png", render.cost_rgba(grid.cost, grid.cell_px, forb.shape), full, off)
     return list(render.LAYER_NAMES)
