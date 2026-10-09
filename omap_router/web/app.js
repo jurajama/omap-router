@@ -330,7 +330,7 @@ function renderControls() {
     const color = { start: "#dc2626", finish: "#2563eb", control: "#c026d3" }[c.kind];
     const circle = L.circle(ll(c.x, c.y), { radius: c.r || r0 || 15, color, weight: 2, fill: false, dashArray: used ? null : "4 4", interactive: false, pmIgnore: true }).addTo(controlLayer);
     const icon = L.divIcon({ className: "", html: `<div class="ctrl-icon ${c.kind} ${used ? "" : "unused"}" style="width:22px;height:22px">${controlLabel(c)}</div>`, iconSize: [22, 22] });
-    const m = L.marker(ll(c.x, c.y), { icon, draggable: true, pmIgnore: true, title: `${c.kind} #${c.id}` }).addTo(controlLayer);
+    const m = L.marker(ll(c.x, c.y), { icon, draggable: true, pmIgnore: true, title: `${c.kind} #${c.id}${c.code ? ", code " + c.code : ""}` }).addTo(controlLayer);
     m.on("drag", (e) => circle.setLatLng(e.latlng));
     m.on("dragend", async (e) => {
       const [x, y] = xy(e.target.getLatLng());
@@ -345,7 +345,7 @@ function renderControls() {
     const tr = document.createElement("tr");
     if (!used) tr.className = "unused";
     const tdN = document.createElement("td");
-    tdN.textContent = controlLabel(c);
+    tdN.textContent = controlLabel(c) + (c.code ? ` (${c.code})` : "");
     const tdU = document.createElement("td");
     const cb = document.createElement("input");
     cb.type = "checkbox";

@@ -208,20 +208,32 @@ def detect_controls(project: Project, cfg: Settings | None = None) -> Project:
             cal.r0_source = "auto"
         cal.px_per_mm = px_per_mm_from_r0(cal.r0, cfg)
     ox, oy = _offset(project)
-    order_pos = {node: i for i, node in enumerate(det.order or [])}
+    # a control visited more than once ("6/10-131") becomes one course entry per visit
+    positions: dict[int, list[int]] = {}
+    for pos, node in enumerate(det.order or []):
+        positions.setdefault(node, []).append(pos)
     ctrls: list[Control] = []
+    extra_id = len(det.nodes)
     for idx, (kind, x, y, r) in enumerate(det.nodes):
-        ctrls.append(
-            Control(
-                id=idx + 1,
-                order=order_pos.get(idx),
-                kind=kind,  # type: ignore[arg-type]
-                x=float(x) + ox,
-                y=float(y) + oy,
-                r=float(r),
-                source="auto",
+        visits = positions.get(idx) or [None]
+        for n, pos in enumerate(visits):
+            if n == 0:
+                cid = idx + 1
+            else:
+                extra_id += 1
+                cid = extra_id
+            ctrls.append(
+                Control(
+                    id=cid,
+                    order=pos,
+                    kind=kind,  # type: ignore[arg-type]
+                    x=float(x) + ox,
+                    y=float(y) + oy,
+                    r=float(r),
+                    code=det.codes.get(idx),
+                    source="auto",
+                )
             )
-        )
     project.controls = ctrls
     project.legs = []
     log.info("detected %d course points (r0=%s)", len(ctrls), cal.r0)
