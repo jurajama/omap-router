@@ -208,3 +208,54 @@ def test_outside_map_mask_empty_for_map_filling_the_image(cfg, synth):
     labels = segment.segment(rgb, segment.reference_colors(rgb, cfg), cfg)
     tl = overprint.remove_purple(labels, overprint.purple_mask(labels), 1)
     assert terrain.outside_map_mask(tl, 6.0, cfg).mean() < 0.01
+
+
+# ---------------------------------------------------------------- low-resolution scans
+
+
+def _scanned_lines(ppm: float = 5.0, blur: float = 0.9):
+    """Draw at 4x with exact printed widths, then downsample and blur like a
+    low-resolution scan: the wall's anti-aliased edges become grey/brown, so
+    counting black pixels alone underestimates its width.
+
+    Returns (bgr image, rows of: thick wall, thin road edge, thin road edge, path)."""
+    up = 4
+    hi_ppm = ppm * up
+    h, w = 120 * up, 220 * up
+    img = np.full((h, w, 3), 255, np.uint8)
+    # beige road bounded by thin (0.14 mm) black edges
+    cv2.rectangle(img, (0, 70 * up), (w, 82 * up), (172, 204, 235), -1)
+    for y in (70 * up, 82 * up):
+        cv2.line(img, (0, y), (w, y), (15, 25, 40), max(1, int(round(0.14 * hi_ppm))))
+    # thick (0.5 mm) impassable wall and a 0.25 mm path
+    cv2.line(img, (0, 30 * up), (w, 30 * up), (15, 25, 40), int(round(0.5 * hi_ppm)))
+    cv2.line(img, (0, 105 * up), (w, 105 * up), (15, 25, 40), int(round(0.25 * hi_ppm)))
+    small = cv2.resize(img, (w // up, h // up), interpolation=cv2.INTER_AREA)
+    small = cv2.GaussianBlur(small, (5, 5), blur)
+    return small, (30, 70, 82, 105)
+
+
+@pytest.mark.parametrize("ppm", [4.5, 5.0])
+def test_thick_wall_detected_on_blurred_low_res_scan(cfg, ppm):
+    from omap_router.pipeline import preprocess, segment
+
+    img, (wall, edge1, edge2, path) = _scanned_lines(ppm)
+    rgb = preprocess.preprocess(img, None, cfg)
+    labels = segment.segment(rgb, segment.reference_colors(rgb, cfg), cfg)
+    light = segment.rgb_to_lab(rgb)[..., 0]
+    bar = lines.barrier_mask(labels, ppm, cfg, light)
+    cols = slice(15, 205)
+    assert bar[wall - 3 : wall + 4, cols].any(axis=0).mean() > 0.95
+    for row in (edge1, edge2, path):
+        assert not bar[row - 3 : row + 4, cols].any(), f"thin line at row {row} became a barrier"
+
+
+def test_grey_fringe_of_line_is_not_a_building(cfg):
+    lab = np.full((60, 120), int(TerrainClass.WHITE), np.uint8)
+    lab[29:31, 10:110] = TerrainClass.BLACK  # thick line core
+    lab[28, 10:110] = TerrainClass.GREY  # anti-aliased fringe classified grey
+    lab[31, 10:110] = TerrainClass.GREY
+    assert not lines.buildings(lab, 6.0, cfg).any()
+    assert not lines.building_outline(lab, 2, 6.0, cfg).any()
+    lab[40:58, 40:80] = TerrainClass.GREY  # a real building
+    assert lines.buildings(lab, 6.0, cfg)[45:55, 45:75].all()

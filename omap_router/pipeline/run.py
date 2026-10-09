@@ -66,18 +66,25 @@ def m_per_px(cal: Calibration, cfg: Settings) -> float:
 
 def _segmentation(project: Project, cfg: Settings) -> tuple[np.ndarray, str]:
     """Stages 8.1 + 8.2 (cached). Returns (labels, cache key)."""
+    labels, _, key = _segmentation_full(project, cfg)
+    return labels, key
+
+
+def _segmentation_full(project: Project, cfg: Settings) -> tuple[np.ndarray, np.ndarray, str]:
+    """Stages 8.1 + 8.2 (cached). Returns (labels, lightness L*, cache key)."""
     key = _key("seg", _image_sha(project), project.crop, project.color_samples, _cfg_dump(cfg))
     cached = storage.cache_load(project.id, "segment", key)
-    if cached is not None:
-        return cached["labels"], key
+    if cached is not None and "lightness" in cached:
+        return cached["labels"], cached["lightness"].astype(np.float32), key
     img = storage.load_image_bgr(project)
     with _timed("preprocess"):
         rgb = preprocess.preprocess(img, project.crop, cfg)
     with _timed("segment"):
         refs = segment.reference_colors(rgb, cfg, project.color_samples, _offset(project))
         labels = segment.segment(rgb, refs, cfg)
-    storage.cache_save(project.id, "segment", key, {"labels": labels})
-    return labels, key
+    lightness = segment.rgb_to_lab(rgb)[..., 0]
+    storage.cache_save(project.id, "segment", key, {"labels": labels, "lightness": lightness.astype(np.float16)})
+    return labels, lightness, key
 
 
 def _purple_for_detection(labels: np.ndarray) -> np.ndarray:
@@ -111,7 +118,7 @@ def _ensure_scale(project: Project, labels: np.ndarray, cfg: Settings) -> None:
 
 def _terrain(project: Project, cfg: Settings) -> dict[str, np.ndarray]:
     """Stages 8.3 + 8.5 + automatic part of 8.6 (cached)."""
-    labels, seg_key = _segmentation(project, cfg)
+    labels, lightness, seg_key = _segmentation_full(project, cfg)
     _ensure_scale(project, labels, cfg)
     ppm = project.calibration.px_per_mm or cfg.default_px_per_mm
     key = _key("terrain", seg_key, round(ppm, 4))
@@ -123,7 +130,7 @@ def _terrain(project: Project, cfg: Settings) -> dict[str, np.ndarray]:
         tlabels = overprint.remove_purple(labels, purple, cfg.purple_dilate_px)
         hatch = overprint.hatch_mask(purple, ppm, cfg) if cfg.hatch_enabled else np.zeros(purple.shape, bool)
     with _timed("lines"):
-        barrier = lines.barrier_mask(tlabels, ppm, cfg)
+        barrier = lines.barrier_mask(tlabels, ppm, cfg, lightness)
     with _timed("forbidden"):
         if cfg.outside_map_enabled:
             outside = terrain.outside_map_mask(tlabels, ppm, cfg)
