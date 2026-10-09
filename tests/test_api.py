@@ -152,3 +152,36 @@ def test_crop_and_color_samples(client, project):
 def test_missing_project(client):
     assert client.get("/api/projects/deadbeef00").status_code == 404
     assert client.get("/api/projects/../../etc").status_code == 404
+
+
+def test_blocked_leg_is_unreachable_not_routed_around_map(client):
+    """A forbid wall across the whole map must not be bypassed through the
+    blank paper around the map."""
+    from synthetic import make_map
+
+    margin = 80
+    m = make_map(seed=2, margin=margin)
+    ok, png = cv2.imencode(".png", m.image)
+    pid = client.post("/api/projects", files={"file": ("map.png", png.tobytes(), "image/png")}).json()["id"]
+    client.post(f"/api/projects/{pid}/analyze")
+    p = client.post(f"/api/projects/{pid}/controls/detect").json()
+    assert len(p["controls"]) == len(m.course)
+    h, w = m.image.shape[:2]
+
+    def in_margin(x, y):
+        return x < margin - 3 or y < margin - 3 or x > w - margin + 3 or y > h - margin + 3
+
+    legs = client.post(f"/api/projects/{pid}/route").json()
+    assert all(leg["ok"] for leg in legs)
+    assert not any(in_margin(x, y) for leg in legs for x, y in leg["path"])
+
+    # wall from the top of the map down to the lake, between start and control 1
+    x0 = margin + 210
+    wall = [(x0 - 6, margin - 2), (x0 + 6, margin - 2), (x0 + 6, margin + 570), (x0 - 6, margin + 570)]
+    client.put(f"/api/projects/{pid}/edits", json=[{"id": "w", "kind": "forbid", "points": wall}])
+    legs = client.post(f"/api/projects/{pid}/route").json()
+    first = legs[0]
+    assert not first["ok"]
+    assert first["path"] == []
+    assert "no route" in first["message"]
+    assert not any(in_margin(x, y) for leg in legs for x, y in leg["path"])

@@ -130,6 +130,8 @@ class Settings(BaseSettings):
     line_min_elongation_ratio: float = 3.0
 
     # --- terrain ---
+    outside_map_enabled: bool = True  # blank paper around the map is impassable
+    map_gap_mm: float = 5.0  # wider featureless white areas touching the edge are outside the map
     water_min_width_mm: float = 0.5  # thinner blue (north lines) stays passable
     cell_mm: float = 0.12
     cost_beige: float = 1.0
