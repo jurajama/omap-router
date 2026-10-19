@@ -11,13 +11,34 @@ no route instead of being routed around the map. You review and correct everythi
 
 ## Run with Docker
 
+A prebuilt multi-architecture image (amd64 and arm64) is published to the GitHub
+Container Registry. With Docker installed:
+
 ```sh
-docker build -t omap-router .
-docker run -p 8000:8000 -v ~/maps:/data omap-router
+docker run --rm -p 8000:8000 ghcr.io/jurajama/omap-router:latest
 ```
 
-Open <http://localhost:8000>. Projects are stored under `~/maps/projects/<id>/`.
-The image builds natively on arm64 and amd64 (no architecture-specific wheels).
+Open <http://localhost:8000>. Stop with Ctrl+C. The container is removed when it
+stops, and so are your projects (uploaded maps, analysis results, edits).
+
+**Keep your projects (optional):** mount a folder from your machine as the data
+directory and they survive restarts and updates:
+
+```sh
+mkdir -p ~/maps
+docker run --rm -p 8000:8000 -v ~/maps:/data ghcr.io/jurajama/omap-router:latest
+```
+
+Projects are then stored under `~/maps/projects/<id>/`.
+
+- Run in the background: add `-d --name omap-router`, stop with `docker stop omap-router`.
+- Update to the newest version: `docker pull ghcr.io/jurajama/omap-router:latest`.
+- Image tags: `latest` is the main branch, `dev` the latest feature branch build,
+  and a release tag such as `v1.0.0` gives the image `ghcr.io/jurajama/omap-router:v1.0.0`.
+
+To build the image yourself instead: `docker build -t omap-router .` and run
+`omap-router` in place of the ghcr.io name above.
+
 The UI loads Leaflet and Leaflet-Geoman from unpkg.com, so the browser needs
 internet access.
 
